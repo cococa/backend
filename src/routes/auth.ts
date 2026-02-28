@@ -30,25 +30,51 @@ authRoute.get('/session', async c => {
 })
 
 authRoute.post('/login', async c => {
+  console.log('[auth/login] request:start')
+
   const body = await c.req.json().catch(() => null)
+  console.log('[auth/login] request:body-parsed', {
+    hasBody: Boolean(body),
+    email: typeof body?.email === 'string' ? body.email : null
+  })
+
   const parsed = loginSchema.safeParse(body)
 
   if (!parsed.success) {
+    console.warn('[auth/login] request:invalid-body', {
+      issues: parsed.error.issues.map(issue => ({
+        path: issue.path.join('.'),
+        code: issue.code
+      }))
+    })
     fail('INVALID_REQUEST', 'Email and password are required', 422)
   }
 
   const credentials = getDemoCredentials()
+  console.log('[auth/login] credentials:loaded', {
+    demoEmail: credentials.email
+  })
 
   if (
     parsed.data.email !== credentials.email ||
     parsed.data.password !== credentials.password
   ) {
+    console.warn('[auth/login] credentials:invalid', {
+      email: parsed.data.email
+    })
     fail('INVALID_CREDENTIALS', 'Invalid email or password', 401)
   }
 
+  console.log('[auth/login] user:ensure-start', {
+    email: credentials.email
+  })
   const user = await ensureDemoUser({
     email: credentials.email,
     name: credentials.name
+  })
+  console.log('[auth/login] user:ensure-success', {
+    id: user.id,
+    email: user.email
   })
 
   const sessionUser = {
@@ -57,7 +83,13 @@ authRoute.post('/login', async c => {
     name: user.name || credentials.name
   }
 
+  console.log('[auth/login] token:create-start', {
+    userId: sessionUser.id
+  })
   const token = await createSessionToken(sessionUser)
+  console.log('[auth/login] token:create-success', {
+    userId: sessionUser.id
+  })
 
   setCookie(c, getSessionCookieName(), token, {
     httpOnly: true,
@@ -66,7 +98,13 @@ authRoute.post('/login', async c => {
     path: '/',
     maxAge: getSessionMaxAge()
   })
+  console.log('[auth/login] cookie:set-success', {
+    userId: sessionUser.id
+  })
 
+  console.log('[auth/login] response:success', {
+    userId: sessionUser.id
+  })
   return c.json(
     ok({
       user: sessionUser,
