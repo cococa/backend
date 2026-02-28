@@ -6,6 +6,7 @@ import { meRoute } from './routes/me.js'
 import { projectsRoute } from './routes/projects.js'
 import { publishedRoute } from './routes/published.js'
 import { notionRoute } from './routes/notion.js'
+import { dataSourcesRoute } from './routes/data-sources.js'
 import { billingRoute } from './routes/billing.js'
 import { shareRoute } from './routes/share.js'
 
@@ -88,6 +89,7 @@ app.get('/debug/env', c => {
 app.route('/api/auth', authRoute)
 app.route('/api/me', meRoute)
 app.route('/api/projects', projectsRoute)
+app.route('/api/data-sources', dataSourcesRoute)
 app.route('/api/published', publishedRoute)
 app.route('/api/notion', notionRoute)
 app.route('/api/billing', billingRoute)
