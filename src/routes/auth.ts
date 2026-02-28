@@ -117,8 +117,13 @@ authRoute.post('/login', async c => {
 })
 
 authRoute.post('/logout', c => {
+  const isSecure = new URL(c.req.url).protocol === 'https:'
+
   deleteCookie(c, getSessionCookieName(), {
-    path: '/'
+    path: '/',
+    secure: isSecure,
+    sameSite: isSecure ? 'None' : 'Lax',
+    httpOnly: true
   })
 
   return c.json(
