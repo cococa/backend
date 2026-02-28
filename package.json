@@ -10,6 +10,7 @@
     "dev:vercel": "vercel dev",
     "build": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
+    "user:create-demo": "tsx scripts/create-demo-user.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio"

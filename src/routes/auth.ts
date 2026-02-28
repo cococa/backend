@@ -9,6 +9,7 @@ import {
   getSessionCookieName,
   getSessionMaxAge
 } from '../lib/auth.js'
+import { ensureDemoUser } from '../services/user.service.js'
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -45,13 +46,18 @@ authRoute.post('/login', async c => {
     fail('INVALID_CREDENTIALS', 'Invalid email or password', 401)
   }
 
-  const user = {
-    id: 'demo-user',
+  const user = await ensureDemoUser({
     email: credentials.email,
     name: credentials.name
+  })
+
+  const sessionUser = {
+    id: user.id,
+    email: user.email,
+    name: user.name || credentials.name
   }
 
-  const token = await createSessionToken(user)
+  const token = await createSessionToken(sessionUser)
 
   setCookie(c, getSessionCookieName(), token, {
     httpOnly: true,
@@ -63,7 +69,7 @@ authRoute.post('/login', async c => {
 
   return c.json(
     ok({
-      user,
+      user: sessionUser,
       token,
       expiresIn: getSessionMaxAge()
     })
