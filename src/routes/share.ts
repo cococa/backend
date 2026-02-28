@@ -1,19 +1,22 @@
 import { Hono } from 'hono'
-import { ok } from '../lib/api.js'
+import { fail, ok } from '../lib/api.js'
+import { prisma } from '../lib/prisma.js'
 
 export const shareRoute = new Hono()
 
-shareRoute.get('/:slug', (c) => {
+shareRoute.get('/:slug', async (c) => {
   const slug = c.req.param('slug')
-  return c.json(
-    ok({
-      publishedChart: {
-        slug,
-        title: 'Demo Shared Chart',
-        description: 'Shared from Chartly',
-        snapshotJson: {},
-        publishedAt: new Date().toISOString()
-      }
-    })
-  )
+
+  const publishedChart = await prisma.publishedChart.findFirst({
+    where: {
+      slug,
+      isPublic: true
+    }
+  })
+
+  if (!publishedChart) {
+    fail('PUBLISHED_CHART_NOT_FOUND', 'Published chart not found', 404)
+  }
+
+  return c.json(ok({ publishedChart }))
 })

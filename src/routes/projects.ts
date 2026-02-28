@@ -1,4 +1,6 @@
+import { Prisma } from '@prisma/client'
 import { Hono } from 'hono'
+import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
 import { fail, ok } from '../lib/api.js'
 import { requireUser } from '../lib/auth.js'
@@ -35,6 +37,10 @@ const updateProjectSchema = createProjectSchema
 
 function normalizeNullable<T>(value: T | null | undefined) {
   return value ?? null
+}
+
+function toInputJsonValue(value: Prisma.JsonValue): Prisma.InputJsonValue {
+  return value as Prisma.InputJsonValue
 }
 
 async function resolveProjectDataSource(userId: string, dataSourceId: string | null) {
@@ -227,16 +233,73 @@ projectsRoute.delete('/:id', async c => {
 })
 
 projectsRoute.post('/:id/publish', async (c) => {
+  const user = await requireUser(c)
   const id = c.req.param('id')
-  const body = await c.req.json()
+  const body = await c.req.json().catch(() => ({}))
+
+  const project = await prisma.chartProject.findFirst({
+    where: {
+      id,
+      userId: user.id,
+      isDeleted: false
+    }
+  })
+
+  if (!project) {
+    fail('PROJECT_NOT_FOUND', 'Project not found', 404)
+  }
+
+  const existing = await prisma.publishedChart.findFirst({
+    where: {
+      projectId: project.id,
+      userId: user.id
+    },
+    orderBy: {
+      updatedAt: 'desc'
+    }
+  })
+
+  const title =
+    (typeof body?.title === 'string' && body.title.trim()) ||
+    project.name ||
+    'Shared Chart'
+  const description =
+    typeof body?.description === 'string' && body.description.trim() ? body.description.trim() : null
+  const isPublic = body?.isPublic !== undefined ? Boolean(body.isPublic) : true
+
+  const publishedChart = existing
+    ? await prisma.publishedChart.update({
+        where: {
+          id: existing.id
+        },
+        data: {
+          title,
+          description,
+          isPublic,
+          access: isPublic ? 'PUBLIC' : existing.access,
+          snapshotJson: toInputJsonValue(project.configJson),
+          publishedAt: new Date()
+        }
+      })
+    : await prisma.publishedChart.create({
+        data: {
+          projectId: project.id,
+          userId: user.id,
+          slug: `chart-${randomUUID()}`,
+          title,
+          description,
+          isPublic,
+          access: isPublic ? 'PUBLIC' : 'PRIVATE',
+          snapshotJson: toInputJsonValue(project.configJson),
+          publishedAt: new Date()
+        }
+      })
+
   return c.json(
     ok({
       publishedChart: {
-        id: 'pub_demo',
-        projectId: id,
-        slug: `project-${id}`,
-        shareUrl: `/share/project-${id}`,
-        ...body
+        ...publishedChart,
+        shareUrl: `/chartly/online-preview?id=${publishedChart.id}`
       }
     })
   )
