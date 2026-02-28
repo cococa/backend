@@ -1,4 +1,3 @@
-import { handle } from 'hono/vercel'
-import { app } from '../src/app.js'
+import handler from '../src/app.js'
 
-export const GET = handle(app)
+export default handler
