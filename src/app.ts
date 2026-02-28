@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import { HTTPException } from 'hono/http-exception'
+import { authRoute } from './routes/auth'
 import { meRoute } from './routes/me'
 import { projectsRoute } from './routes/projects'
 import { publishedRoute } from './routes/published'
@@ -17,6 +18,7 @@ app.get('/', (c) => {
   })
 })
 
+app.route('/api/auth', authRoute)
 app.route('/api/me', meRoute)
 app.route('/api/projects', projectsRoute)
 app.route('/api/published', publishedRoute)
