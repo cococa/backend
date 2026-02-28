@@ -31,7 +31,9 @@ app.get('/api/health', c => {
   return c.json({
     success: true,
     status: 'ok',
-    service: 'chartly-backend'
+    service: 'chartly-backend',
+    environment: process.env.VERCEL_ENV || process.env.NODE_ENV || 'development',
+    timestamp: new Date().toISOString()
   })
 })
 
