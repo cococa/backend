@@ -54,7 +54,8 @@ app.get('/api', c => {
     success: true,
     service: 'chartly-backend',
     scope: 'api',
-    version: '0.1.0'
+    version: '0.1.0',
+    timestamp: new Date().toISOString()
   })
 })
 
