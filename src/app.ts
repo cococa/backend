@@ -35,6 +35,21 @@ app.get('/api/health', c => {
   })
 })
 
+app.get('/debug/env', c => {
+  const databaseUrl = process.env.DATABASE_URL || ''
+  const authSecret = process.env.AUTH_SECRET || ''
+
+  return c.json({
+    success: true,
+    data: {
+      hasDatabaseUrl: Boolean(databaseUrl),
+      databaseUrlPreview: databaseUrl ? `${databaseUrl.slice(0, 24)}...` : null,
+      hasAuthSecret: Boolean(authSecret),
+      authSecretLength: authSecret.length
+    }
+  })
+})
+
 app.route('/api/auth', authRoute)
 app.route('/api/me', meRoute)
 app.route('/api/projects', projectsRoute)
