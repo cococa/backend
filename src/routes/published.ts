@@ -2,6 +2,11 @@ import { Hono } from 'hono'
 import { fail, ok } from '../lib/api.js'
 import { requireUser } from '../lib/auth.js'
 import { prisma } from '../lib/prisma.js'
+import {
+  isSharePasswordValid,
+  normalizeSharePassword,
+  validateSharePassword
+} from '../lib/share-password.js'
 
 export const publishedRoute = new Hono()
 
@@ -43,6 +48,7 @@ publishedRoute.patch('/:id', async (c) => {
 
 publishedRoute.get('/:id/public', async c => {
   const id = c.req.param('id')
+  const sharePassword = normalizeSharePassword(c.req.query('password'))
 
   const publishedChart =
     (await prisma.publishedChart.findFirst({
@@ -63,6 +69,22 @@ publishedRoute.get('/:id/public', async c => {
 
   if (!publishedChart) {
     fail('PUBLISHED_CHART_NOT_FOUND', 'Published chart not found', 404)
+  }
+
+  if (publishedChart.passwordHash || publishedChart.access === 'PASSWORD') {
+    if (!sharePassword) {
+      fail('PASSWORD_REQUIRED', 'This shared chart requires a password.', 401)
+    }
+
+    try {
+      validateSharePassword(sharePassword)
+    } catch (error: any) {
+      fail('INVALID_PASSWORD', error?.message || 'Invalid password', 401)
+    }
+
+    if (!publishedChart.passwordHash || !isSharePasswordValid(sharePassword, publishedChart.passwordHash)) {
+      fail('INVALID_PASSWORD', 'Incorrect password.', 401)
+    }
   }
 
   return c.json(

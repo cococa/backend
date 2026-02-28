@@ -5,6 +5,11 @@ import { z } from 'zod'
 import { fail, ok } from '../lib/api.js'
 import { requireUser } from '../lib/auth.js'
 import { prisma } from '../lib/prisma.js'
+import {
+  hashSharePassword,
+  normalizeSharePassword,
+  validateSharePassword
+} from '../lib/share-password.js'
 
 export const projectsRoute = new Hono()
 
@@ -266,6 +271,16 @@ projectsRoute.post('/:id/publish', async (c) => {
   const description =
     typeof body?.description === 'string' && body.description.trim() ? body.description.trim() : null
   const isPublic = body?.isPublic !== undefined ? Boolean(body.isPublic) : true
+  const sharePassword = normalizeSharePassword(body?.password)
+
+  try {
+    validateSharePassword(sharePassword)
+  } catch (error: any) {
+    fail('INVALID_SHARE_PASSWORD', error?.message || 'Invalid share password', 422)
+  }
+
+  const passwordHash = sharePassword ? hashSharePassword(sharePassword) : null
+  const access = !isPublic ? 'PRIVATE' : passwordHash ? 'PASSWORD' : 'PUBLIC'
 
   const publishedChart = existing
     ? await prisma.publishedChart.update({
@@ -276,7 +291,8 @@ projectsRoute.post('/:id/publish', async (c) => {
           title,
           description,
           isPublic,
-          access: isPublic ? 'PUBLIC' : existing.access,
+          access,
+          passwordHash,
           snapshotJson: toInputJsonValue(project.configJson),
           publishedAt: new Date()
         }
@@ -289,7 +305,8 @@ projectsRoute.post('/:id/publish', async (c) => {
           title,
           description,
           isPublic,
-          access: isPublic ? 'PUBLIC' : 'PRIVATE',
+          access,
+          passwordHash,
           snapshotJson: toInputJsonValue(project.configJson),
           publishedAt: new Date()
         }

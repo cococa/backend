@@ -86,15 +86,6 @@ app.get('/debug/env', c => {
   })
 })
 
-app.get('/debug/version', c => {
-  return c.json({
-    success: true,
-    data: {
-      version: 'backend-publish-real-2026-02-28-1'
-    }
-  })
-})
-
 app.route('/api/auth', authRoute)
 app.route('/api/me', meRoute)
 app.route('/api/projects', projectsRoute)
