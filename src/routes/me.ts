@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
-import { ok } from '../lib/api'
-import { requireUser } from '../lib/auth'
+import { ok } from '../lib/api.js'
+import { requireUser } from '../lib/auth.js'
 
 export const meRoute = new Hono()
 

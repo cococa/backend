@@ -1,14 +1,14 @@
 import { Hono } from 'hono'
 import { deleteCookie, setCookie } from 'hono/cookie'
 import { z } from 'zod'
-import { fail, ok } from '../lib/api'
+import { fail, ok } from '../lib/api.js'
 import {
   createSessionToken,
   getDemoCredentials,
   getOptionalUser,
   getSessionCookieName,
   getSessionMaxAge
-} from '../lib/auth'
+} from '../lib/auth.js'
 
 const loginSchema = z.object({
   email: z.string().email(),

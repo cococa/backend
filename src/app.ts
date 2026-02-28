@@ -1,12 +1,12 @@
 import { Hono } from 'hono'
 import { HTTPException } from 'hono/http-exception'
-import { authRoute } from './routes/auth'
-import { meRoute } from './routes/me'
-import { projectsRoute } from './routes/projects'
-import { publishedRoute } from './routes/published'
-import { notionRoute } from './routes/notion'
-import { billingRoute } from './routes/billing'
-import { shareRoute } from './routes/share'
+import { authRoute } from './routes/auth.js'
+import { meRoute } from './routes/me.js'
+import { projectsRoute } from './routes/projects.js'
+import { publishedRoute } from './routes/published.js'
+import { notionRoute } from './routes/notion.js'
+import { billingRoute } from './routes/billing.js'
+import { shareRoute } from './routes/share.js'
 
 export const app = new Hono()
 

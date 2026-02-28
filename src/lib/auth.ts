@@ -2,7 +2,7 @@ import type { Context } from 'hono'
 import { getCookie } from 'hono/cookie'
 import { sign, verify } from 'hono/jwt'
 import { z } from 'zod'
-import { fail } from './api'
+import { fail } from './api.js'
 
 const SESSION_COOKIE_NAME = 'chartly_session'
 const SESSION_EXPIRES_IN_SECONDS = 60 * 60 * 24 * 7

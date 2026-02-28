@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { ok } from '../lib/api'
+import { ok } from '../lib/api.js'
 
 export const notionRoute = new Hono()
 
