@@ -18,6 +18,23 @@ app.get('/', c => {
   })
 })
 
+app.get('/api', c => {
+  return c.json({
+    success: true,
+    service: 'chartly-backend',
+    scope: 'api',
+    version: '0.1.0'
+  })
+})
+
+app.get('/api/health', c => {
+  return c.json({
+    success: true,
+    status: 'ok',
+    service: 'chartly-backend'
+  })
+})
+
 app.route('/api/auth', authRoute)
 app.route('/api/me', meRoute)
 app.route('/api/projects', projectsRoute)
