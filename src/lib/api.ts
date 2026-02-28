@@ -1,4 +1,5 @@
 import { HTTPException } from 'hono/http-exception'
+import type { ContentfulStatusCode } from 'hono/utils/http-status'
 
 export function ok<T>(data: T, meta: Record<string, unknown> = {}) {
   return {
@@ -8,7 +9,11 @@ export function ok<T>(data: T, meta: Record<string, unknown> = {}) {
   }
 }
 
-export function fail(code: string, message: string, status = 400): never {
+export function fail(
+  code: string,
+  message: string,
+  status: ContentfulStatusCode = 400
+): never {
   throw new HTTPException(status, {
     message,
     cause: {
