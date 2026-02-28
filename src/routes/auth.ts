@@ -91,10 +91,12 @@ authRoute.post('/login', async c => {
     userId: sessionUser.id
   })
 
+  const isSecure = new URL(c.req.url).protocol === 'https:'
+
   setCookie(c, getSessionCookieName(), token, {
     httpOnly: true,
-    secure: new URL(c.req.url).protocol === 'https:',
-    sameSite: 'Lax',
+    secure: isSecure,
+    sameSite: isSecure ? 'None' : 'Lax',
     path: '/',
     maxAge: getSessionMaxAge()
   })

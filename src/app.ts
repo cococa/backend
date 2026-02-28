@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import { cors } from 'hono/cors'
 import { HTTPException } from 'hono/http-exception'
 import { authRoute } from './routes/auth.js'
 import { meRoute } from './routes/me.js'
@@ -9,6 +10,36 @@ import { billingRoute } from './routes/billing.js'
 import { shareRoute } from './routes/share.js'
 
 const app = new Hono()
+
+const defaultAllowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:4173',
+  'http://localhost:5173'
+]
+
+const configuredOrigins = (process.env.CORS_ALLOWED_ORIGINS || '')
+  .split(',')
+  .map(origin => origin.trim())
+  .filter(Boolean)
+
+const allowedOrigins = new Set([...defaultAllowedOrigins, ...configuredOrigins])
+
+app.use(
+  '/api/*',
+  cors({
+    origin: origin => {
+      if (!origin) {
+        return ''
+      }
+
+      return allowedOrigins.has(origin) ? origin : ''
+    },
+    allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowHeaders: ['Content-Type', 'Authorization'],
+    credentials: true,
+    maxAge: 86400
+  })
+)
 
 app.get('/', c => {
   return c.json({
