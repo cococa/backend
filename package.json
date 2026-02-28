@@ -8,8 +8,9 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "dev:vercel": "vercel dev",
-    "build": "tsc --noEmit",
+    "build": "prisma generate && tsc --noEmit",
     "typecheck": "tsc --noEmit",
+    "postinstall": "prisma generate",
     "user:create-demo": "tsx scripts/create-demo-user.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
