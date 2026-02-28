@@ -1,6 +1,6 @@
 # Projects API
 
-This document covers the real configuration CRUD endpoints for chart projects.
+This document covers the configuration CRUD endpoints for chart projects.
 
 Base URL:
 
@@ -19,13 +19,30 @@ Important fields:
 
 - `name`
 - `description`
-- `sourceType`
-- `notionSourceId`
-- `notionPageId`
+- `dataSourceId`
 - `chartType`
 - `configJson`
 - `themeJson`
 - `publishOptionsJson`
+
+Each project can optionally bind to a unified `DataSource` record.
+The data source stores:
+
+- `type`
+- `sourceJson`
+- `fieldSchemaJson`
+- `previewJson`
+
+Recommended `fieldSchemaJson` shape:
+
+```json
+{
+  "fields": [
+    { "key": "id", "type": "number" },
+    { "key": "name", "type": "string" }
+  ]
+}
+```
 
 ## 1. Create project
 
@@ -37,9 +54,7 @@ Important fields:
 {
   "name": "Weekly Revenue",
   "description": "Revenue chart from Notion page",
-  "sourceType": "NOTION",
-  "notionSourceId": null,
-  "notionPageId": "1b0f1d11-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+  "dataSourceId": "ds_notion_001",
   "chartType": "bar",
   "configJson": {
     "type": "common",
@@ -75,18 +90,30 @@ Important fields:
     "project": {
       "id": "cm8xxxx",
       "userId": "cm8user",
+      "dataSourceId": "ds_notion_001",
       "name": "Weekly Revenue",
       "description": "Revenue chart from Notion page",
-      "sourceType": "NOTION",
-      "notionSourceId": null,
-      "notionPageId": "1b0f1d11-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
       "chartType": "bar",
       "configJson": {},
       "themeJson": null,
       "publishOptionsJson": null,
       "isDeleted": false,
       "createdAt": "2026-02-28T10:00:00.000Z",
-      "updatedAt": "2026-02-28T10:00:00.000Z"
+      "updatedAt": "2026-02-28T10:00:00.000Z",
+      "dataSource": {
+        "id": "ds_notion_001",
+        "type": "NOTION",
+        "name": "Revenue Source",
+        "sourceJson": {
+          "pageId": "1b0f1d11-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+        },
+        "fieldSchemaJson": {
+          "fields": [
+            { "key": "month", "type": "string" },
+            { "key": "value", "type": "number" }
+          ]
+        }
+      }
     }
   },
   "meta": {}
@@ -98,6 +125,7 @@ Important fields:
 `GET /api/projects`
 
 Returns current user projects ordered by `updatedAt desc`, excluding soft deleted records.
+The response includes the bound `dataSource`.
 
 ### Response
 
@@ -139,6 +167,18 @@ If the project does not belong to the current user or was deleted:
 }
 ```
 
+If the `dataSourceId` does not belong to the current user:
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "DATA_SOURCE_NOT_FOUND",
+    "message": "Data source not found"
+  }
+}
+```
+
 ## 4. Update project
 
 `PATCH /api/projects/:id`
@@ -150,6 +190,7 @@ Supports partial update. At least one field is required.
 ```json
 {
   "name": "Weekly Revenue v2",
+  "dataSourceId": "ds_csv_001",
   "chartType": "line",
   "themeJson": {
     "colorScheme": {
@@ -221,8 +262,7 @@ await fetch('https://backend-z6vv.vercel.app/api/projects', {
   credentials: 'include',
   body: JSON.stringify({
     name: 'Weekly Revenue',
-    sourceType: 'NOTION',
-    notionPageId: 'page_id_from_notion',
+    dataSourceId: 'ds_notion_001',
     chartType: 'bar',
     configJson: {},
     themeJson: null,

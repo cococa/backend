@@ -1,5 +1,4 @@
 import { Hono } from 'hono'
-import { SourceType } from '@prisma/client'
 import { z } from 'zod'
 import { fail, ok } from '../lib/api.js'
 import { requireUser } from '../lib/auth.js'
@@ -21,9 +20,7 @@ const jsonValueSchema: z.ZodTypeAny = z.lazy(() =>
 const createProjectSchema = z.object({
   name: z.string().min(1).max(200),
   description: z.string().max(2000).optional().nullable(),
-  sourceType: z.nativeEnum(SourceType).optional(),
-  notionSourceId: z.string().min(1).optional().nullable(),
-  notionPageId: z.string().min(1).optional().nullable(),
+  dataSourceId: z.string().min(1).optional().nullable(),
   chartType: z.string().min(1).max(100),
   configJson: jsonValueSchema,
   themeJson: jsonValueSchema.optional().nullable(),
@@ -40,6 +37,26 @@ function normalizeNullable<T>(value: T | null | undefined) {
   return value ?? null
 }
 
+async function resolveProjectDataSource(userId: string, dataSourceId: string | null) {
+  if (!dataSourceId) {
+    return null
+  }
+
+  const dataSource = await prisma.dataSource.findFirst({
+    where: {
+      id: dataSourceId,
+      userId,
+      isDeleted: false
+    }
+  })
+
+  if (!dataSource) {
+    fail('DATA_SOURCE_NOT_FOUND', 'Data source not found', 404)
+  }
+
+  return dataSource
+}
+
 projectsRoute.get('/', async c => {
   const user = await requireUser(c)
 
@@ -47,6 +64,9 @@ projectsRoute.get('/', async c => {
     where: {
       userId: user.id,
       isDeleted: false
+    },
+    include: {
+      dataSource: true
     },
     orderBy: {
       updatedAt: 'desc'
@@ -69,18 +89,22 @@ projectsRoute.post('/', async c => {
     fail('INVALID_PROJECT_PAYLOAD', 'Invalid project payload', 422)
   }
 
+  const dataSourceId = normalizeNullable(parsed.data.dataSourceId)
+  await resolveProjectDataSource(user.id, dataSourceId)
+
   const project = await prisma.chartProject.create({
     data: {
       userId: user.id,
       name: parsed.data.name,
       description: normalizeNullable(parsed.data.description),
-      sourceType: parsed.data.sourceType || SourceType.NOTION,
-      notionSourceId: normalizeNullable(parsed.data.notionSourceId),
-      notionPageId: normalizeNullable(parsed.data.notionPageId),
+      dataSourceId,
       chartType: parsed.data.chartType,
       configJson: parsed.data.configJson,
       themeJson: normalizeNullable(parsed.data.themeJson),
       publishOptionsJson: normalizeNullable(parsed.data.publishOptionsJson)
+    },
+    include: {
+      dataSource: true
     }
   })
 
@@ -100,6 +124,9 @@ projectsRoute.get('/:id', async c => {
       id,
       userId: user.id,
       isDeleted: false
+    },
+    include: {
+      dataSource: true
     }
   })
 
@@ -132,6 +159,12 @@ projectsRoute.patch('/:id', async c => {
     fail('PROJECT_NOT_FOUND', 'Project not found', 404)
   }
 
+  let dataSourceId: string | null | undefined
+  if (parsed.data.dataSourceId !== undefined) {
+    dataSourceId = normalizeNullable(parsed.data.dataSourceId)
+    await resolveProjectDataSource(user.id, dataSourceId)
+  }
+
   const project = await prisma.chartProject.update({
     where: {
       id
@@ -141,12 +174,8 @@ projectsRoute.patch('/:id', async c => {
       ...(parsed.data.description !== undefined
         ? { description: normalizeNullable(parsed.data.description) }
         : {}),
-      ...(parsed.data.sourceType !== undefined ? { sourceType: parsed.data.sourceType } : {}),
-      ...(parsed.data.notionSourceId !== undefined
-        ? { notionSourceId: normalizeNullable(parsed.data.notionSourceId) }
-        : {}),
-      ...(parsed.data.notionPageId !== undefined
-        ? { notionPageId: normalizeNullable(parsed.data.notionPageId) }
+      ...(parsed.data.dataSourceId !== undefined
+        ? { dataSourceId }
         : {}),
       ...(parsed.data.chartType !== undefined ? { chartType: parsed.data.chartType } : {}),
       ...(parsed.data.configJson !== undefined ? { configJson: parsed.data.configJson } : {}),
@@ -156,6 +185,9 @@ projectsRoute.patch('/:id', async c => {
       ...(parsed.data.publishOptionsJson !== undefined
         ? { publishOptionsJson: normalizeNullable(parsed.data.publishOptionsJson) }
         : {})
+    },
+    include: {
+      dataSource: true
     }
   })
 

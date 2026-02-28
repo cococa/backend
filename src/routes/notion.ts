@@ -7,16 +7,23 @@ notionRoute.post('/bind-page', async (c) => {
   const body = await c.req.json()
   return c.json(
     ok({
-      notionSource: {
+      dataSource: {
         id: 'notion_src_demo',
-        pageId: body.pageId,
-        pageTitle: body.pageTitle || null,
-        accessType: 'public-page'
+        type: 'NOTION',
+        name: body.pageTitle || 'Notion Page',
+        description: null,
+        sourceJson: {
+          pageId: body.pageId,
+          pageTitle: body.pageTitle || null,
+          accessType: 'public-page'
+        },
+        fieldSchemaJson: null,
+        previewJson: null
       }
     })
   )
 })
 
 notionRoute.get('/sources', (c) => {
-  return c.json(ok({ sources: [] }))
+  return c.json(ok({ dataSources: [] }))
 })

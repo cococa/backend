@@ -8,9 +8,13 @@ Phase 1 supports:
 - user management
 - membership management
 - chart project configuration management
+- generalized data source management
 - Notion page based publishing
 
 For phase 1, only `NOTION` sources are shareable, and the minimal source identifier is a `pageId`.
+Other source types such as `CSV_FILE` and `EXCEL_FILE` are modeled through the same `DataSource.sourceJson`
+structure, so file storage paths and future third-party provider configs can be added without changing
+the project table again.
 
 ## Runtime
 
@@ -58,6 +62,61 @@ backend/
 - `GET /api/notion/sources`
 - `GET /api/billing/membership`
 - `GET /api/share/:slug`
+
+## Data model direction
+
+### `DataSource`
+
+Unified data source definition table.
+
+Key fields:
+
+- `type`
+- `name`
+- `description`
+- `sourceJson`
+- `fieldSchemaJson`
+- `previewJson`
+
+Recommended `sourceJson` shapes:
+
+```json
+{
+  "pageId": "notion-page-id"
+}
+```
+
+```json
+{
+  "storageProvider": "supabase",
+  "bucket": "chart-data",
+  "path": "users/u1/ds_001/source.csv",
+  "fileName": "sales.csv"
+}
+```
+
+Recommended `fieldSchemaJson` shape:
+
+```json
+{
+  "fields": [
+    { "key": "id", "type": "number" },
+    { "key": "name", "type": "string" }
+  ]
+}
+```
+
+This metadata is used for:
+
+- field auto-mapping
+- data type inference
+- form generation
+- stable schema display in UI
+
+### `ChartProject`
+
+Projects no longer carry source-specific fields such as `notionPageId`.
+They reference a unified `dataSourceId` instead.
 
 ## Response contract
 
