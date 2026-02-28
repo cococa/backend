@@ -1,0 +1,149 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum MembershipPlan {
+  FREE
+  PRO
+  TEAM
+}
+
+enum MembershipStatus {
+  ACTIVE
+  EXPIRED
+  CANCELED
+  TRIALING
+}
+
+enum SourceType {
+  NOTION
+}
+
+enum PublishAccess {
+  PUBLIC
+  PASSWORD
+  PRIVATE
+}
+
+enum BillingEventType {
+  MEMBERSHIP_CREATED
+  MEMBERSHIP_UPDATED
+  MEMBERSHIP_CANCELED
+  PAYMENT_SUCCEEDED
+  PAYMENT_FAILED
+  MANUAL_GRANT
+}
+
+model User {
+  id              String           @id @default(cuid())
+  authUserId      String           @unique
+  email           String           @unique
+  name            String?
+  avatar          String?
+  timezone        String?          @default("Asia/Shanghai")
+  locale          String?          @default("zh-CN")
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  memberships     Membership[]
+  projects        ChartProject[]
+  notionSources   NotionSource[]
+  publishedCharts PublishedChart[]
+  billingEvents   BillingEvent[]
+}
+
+model Membership {
+  id          String            @id @default(cuid())
+  userId      String
+  plan        MembershipPlan    @default(FREE)
+  status      MembershipStatus  @default(ACTIVE)
+  startAt     DateTime          @default(now())
+  endAt       DateTime?
+  metaJson    Json?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  billingLogs BillingEvent[]
+
+  @@index([userId, status])
+}
+
+model NotionSource {
+  id           String       @id @default(cuid())
+  userId       String
+  pageId       String
+  pageTitle    String?
+  accessType   String?      @default("public-page")
+  rawMetaJson  Json?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projects     ChartProject[]
+
+  @@unique([userId, pageId])
+  @@index([pageId])
+}
+
+model ChartProject {
+  id                 String            @id @default(cuid())
+  userId             String
+  notionSourceId     String?
+  name               String
+  description        String?
+  sourceType         SourceType        @default(NOTION)
+  notionPageId       String?
+  chartType          String
+  configJson         Json
+  themeJson          Json?
+  publishOptionsJson Json?
+  isDeleted          Boolean           @default(false)
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  user               User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  notionSource       NotionSource?     @relation(fields: [notionSourceId], references: [id], onDelete: SetNull)
+  publishedCharts    PublishedChart[]
+
+  @@index([userId, isDeleted])
+  @@index([notionPageId])
+}
+
+model PublishedChart {
+  id           String        @id @default(cuid())
+  projectId    String
+  userId       String
+  slug         String        @unique
+  title        String
+  description  String?
+  access       PublishAccess @default(PUBLIC)
+  isPublic     Boolean       @default(true)
+  passwordHash String?
+  snapshotJson Json
+  viewCount    Int           @default(0)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  publishedAt  DateTime?     @default(now())
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project      ChartProject  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([projectId])
+  @@index([slug])
+}
+
+model BillingEvent {
+  id           String           @id @default(cuid())
+  userId       String
+  membershipId String?
+  eventType    BillingEventType
+  payloadJson  Json?
+  createdAt    DateTime         @default(now())
+  user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  membership   Membership?      @relation(fields: [membershipId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([membershipId])
+}
