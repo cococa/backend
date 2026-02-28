@@ -63,6 +63,7 @@ app.get('/api/health', c => {
     success: true,
     status: 'ok',
     service: 'chartly-backend',
+    region: process.env.VERCEL_REGION || 'local',
     environment: process.env.VERCEL_ENV || process.env.NODE_ENV || 'development',
     timestamp: new Date().toISOString()
   })
