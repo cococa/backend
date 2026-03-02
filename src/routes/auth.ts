@@ -253,7 +253,7 @@ authRoute.get('/github/callback', async c => {
   const redirectUri =
     github.redirectUri || `${new URL(c.req.url).origin}/api/auth/github/callback`
 
-  const tokenResponse = await fetch('https://github.com/login/oauth/access_token', {
+  const tokenResponse = (await fetch('https://github.com/login/oauth/access_token', {
     method: 'POST',
     headers: {
       Accept: 'application/json',
@@ -265,7 +265,12 @@ authRoute.get('/github/callback', async c => {
       code,
       redirect_uri: redirectUri
     }).toString()
-  }).catch(() => null)
+  }).catch(() => null)) as
+    | {
+        ok: boolean
+        json: () => Promise<unknown>
+      }
+    | null
 
   if (!tokenResponse?.ok) {
     return c.redirect(appendAuthError(returnTo, 'github_token_exchange_failed'))
@@ -279,13 +284,18 @@ authRoute.get('/github/callback', async c => {
 
   const githubAccessToken = tokenJson.data.access_token
 
-  const userResponse = await fetch('https://api.github.com/user', {
+  const userResponse = (await fetch('https://api.github.com/user', {
     headers: {
       Accept: 'application/json',
       Authorization: `Bearer ${githubAccessToken}`,
       'User-Agent': 'chartly-auth'
     }
-  }).catch(() => null)
+  }).catch(() => null)) as
+    | {
+        ok: boolean
+        json: () => Promise<unknown>
+      }
+    | null
 
   if (!userResponse?.ok) {
     return c.redirect(appendAuthError(returnTo, 'github_user_fetch_failed'))
@@ -300,13 +310,18 @@ authRoute.get('/github/callback', async c => {
   let email = githubUserResult.data.email || ''
 
   if (!email) {
-    const emailResponse = await fetch('https://api.github.com/user/emails', {
+    const emailResponse = (await fetch('https://api.github.com/user/emails', {
       headers: {
         Accept: 'application/json',
         Authorization: `Bearer ${githubAccessToken}`,
         'User-Agent': 'chartly-auth'
       }
-    }).catch(() => null)
+    }).catch(() => null)) as
+      | {
+          ok: boolean
+          json: () => Promise<unknown>
+        }
+      | null
 
     if (!emailResponse?.ok) {
       return c.redirect(appendAuthError(returnTo, 'github_email_fetch_failed'))
