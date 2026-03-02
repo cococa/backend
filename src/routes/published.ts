@@ -55,12 +55,26 @@ publishedRoute.get('/:id/public', async c => {
       where: {
         id,
         isPublic: true
+      },
+      include: {
+        project: {
+          include: {
+            dataSource: true
+          }
+        }
       }
     })) ||
     (await prisma.publishedChart.findFirst({
       where: {
         projectId: id,
         isPublic: true
+      },
+      include: {
+        project: {
+          include: {
+            dataSource: true
+          }
+        }
       },
       orderBy: {
         updatedAt: 'desc'
