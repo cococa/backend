@@ -22,6 +22,10 @@ export type SessionUser = {
   name: string
 }
 
+type OAuthStatePayload = {
+  returnTo: string
+}
+
 export function getSessionCookieName() {
   return SESSION_COOKIE_NAME
 }
@@ -42,6 +46,31 @@ export function getDemoCredentials() {
   }
 }
 
+export function getGoogleCredentials() {
+  return {
+    clientId: process.env.GOOGLE_CLIENT_ID || '',
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
+    redirectUri: process.env.GOOGLE_REDIRECT_URI || ''
+  }
+}
+
+export function getAllowedReturnToOrigins() {
+  const configured = (process.env.AUTH_ALLOWED_RETURN_TO_ORIGINS || '')
+    .split(',')
+    .map(value => value.trim())
+    .filter(Boolean)
+
+  const defaults = [
+    process.env.APP_URL || '',
+    ...(process.env.CORS_ALLOWED_ORIGINS || '')
+      .split(',')
+      .map(value => value.trim())
+      .filter(Boolean)
+  ].filter(Boolean)
+
+  return Array.from(new Set([...defaults, ...configured]))
+}
+
 export async function createSessionToken(user: SessionUser) {
   const now = Math.floor(Date.now() / 1000)
 
@@ -56,6 +85,37 @@ export async function createSessionToken(user: SessionUser) {
     getAuthSecret(),
     'HS256'
   )
+}
+
+export async function createOAuthStateToken(payload: OAuthStatePayload) {
+  const now = Math.floor(Date.now() / 1000)
+
+  return sign(
+    {
+      type: 'oauth-state',
+      returnTo: payload.returnTo,
+      iat: now,
+      exp: now + 60 * 10
+    },
+    getAuthSecret(),
+    'HS256'
+  )
+}
+
+export async function parseOAuthStateToken(token: string): Promise<OAuthStatePayload | null> {
+  try {
+    const payload = await verify(token, getAuthSecret(), 'HS256')
+    const returnTo = typeof payload?.returnTo === 'string' ? payload.returnTo : ''
+    const type = typeof payload?.type === 'string' ? payload.type : ''
+
+    if (!returnTo || type !== 'oauth-state') {
+      return null
+    }
+
+    return { returnTo }
+  } catch {
+    return null
+  }
 }
 
 function getBearerToken(c: Context) {
