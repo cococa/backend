@@ -1,4 +1,5 @@
 import { MembershipPlan, MembershipStatus } from '@prisma/client'
+import { createHash, randomBytes } from 'node:crypto'
 import { prisma } from '../lib/prisma.js'
 
 type EnsureDemoUserInput = {
@@ -10,7 +11,8 @@ export async function ensureDemoUser(input: EnsureDemoUserInput) {
   const user = await upsertUserWithMembership({
     authUserId: `demo:${input.email}`,
     email: input.email,
-    name: input.name
+    name: input.name,
+    emailVerifiedAt: new Date()
   })
 
   return user
@@ -29,7 +31,8 @@ export async function ensureOAuthUser(input: EnsureOAuthUserInput) {
     authUserId: `${input.provider}:${input.providerUserId}`,
     email: input.email,
     name: input.name,
-    avatar: input.avatar ?? null
+    avatar: input.avatar ?? null,
+    emailVerifiedAt: new Date()
   })
 
   return user
@@ -61,6 +64,7 @@ export async function registerLocalUser(input: RegisterLocalUserInput) {
       data: {
         authUserId: `local:${input.email}`,
         name: input.name,
+        emailVerifiedAt: null,
         passwordCredential: {
           create: {
             passwordHash: input.passwordHash
@@ -86,6 +90,7 @@ export async function registerLocalUser(input: RegisterLocalUserInput) {
       authUserId: `local:${input.email}`,
       email: input.email,
       name: input.name,
+      emailVerifiedAt: null,
       passwordCredential: {
         create: {
           passwordHash: input.passwordHash
@@ -118,6 +123,7 @@ async function upsertUserWithMembership(input: {
   email: string
   name: string
   avatar?: string | null
+  emailVerifiedAt?: Date | null
 }) {
   const user = await prisma.user.upsert({
     where: {
@@ -126,13 +132,15 @@ async function upsertUserWithMembership(input: {
     update: {
       authUserId: input.authUserId,
       name: input.name,
-      avatar: input.avatar ?? undefined
+      avatar: input.avatar ?? undefined,
+      emailVerifiedAt: input.emailVerifiedAt ?? undefined
     },
     create: {
       authUserId: input.authUserId,
       email: input.email,
       name: input.name,
-      avatar: input.avatar ?? undefined
+      avatar: input.avatar ?? undefined,
+      emailVerifiedAt: input.emailVerifiedAt ?? undefined
     }
   })
 
@@ -157,4 +165,68 @@ async function ensureFreeMembership(userId: string) {
       status: MembershipStatus.ACTIVE
     }
   })
+}
+
+function hashVerificationToken(token: string) {
+  return createHash('sha256').update(token).digest('hex')
+}
+
+export async function issueEmailVerificationToken(userId: string) {
+  const rawToken = randomBytes(32).toString('hex')
+  const tokenHash = hashVerificationToken(rawToken)
+  const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24)
+
+  await prisma.emailVerificationToken.updateMany({
+    where: {
+      userId,
+      usedAt: null
+    },
+    data: {
+      usedAt: new Date()
+    }
+  })
+
+  await prisma.emailVerificationToken.create({
+    data: {
+      userId,
+      tokenHash,
+      expiresAt
+    }
+  })
+
+  return {
+    rawToken,
+    expiresAt
+  }
+}
+
+export async function consumeEmailVerificationToken(rawToken: string) {
+  const tokenHash = hashVerificationToken(rawToken)
+  const token = await prisma.emailVerificationToken.findUnique({
+    where: {
+      tokenHash
+    },
+    include: {
+      user: true
+    }
+  })
+
+  if (!token || token.usedAt || token.expiresAt.getTime() < Date.now()) {
+    return null
+  }
+
+  const now = new Date()
+
+  await prisma.$transaction([
+    prisma.emailVerificationToken.update({
+      where: { id: token.id },
+      data: { usedAt: now }
+    }),
+    prisma.user.update({
+      where: { id: token.userId },
+      data: { emailVerifiedAt: now }
+    })
+  ])
+
+  return token.user
 }

@@ -4,6 +4,7 @@ import { randomBytes, scrypt as scryptCallback, timingSafeEqual } from 'node:cry
 import { promisify } from 'node:util'
 import { z } from 'zod'
 import { fail, ok } from '../lib/api.js'
+import { sendEmail, canSendEmail } from '../lib/email.js'
 
 import {
   createOAuthStateToken,
@@ -21,6 +22,8 @@ import {
   ensureDemoUser,
   ensureOAuthUser,
   findLocalUserByEmail,
+  issueEmailVerificationToken,
+  consumeEmailVerificationToken,
   registerLocalUser
 } from '../services/user.service.js'
 
@@ -40,6 +43,10 @@ const registerSchema = z
     message: 'Password confirmation does not match',
     path: ['passwordConfirm']
   })
+
+const resendVerificationSchema = z.object({
+  email: z.string().trim().email()
+})
 
 const googleTokenInfoSchema = z.object({
   aud: z.string().min(1),
@@ -419,6 +426,10 @@ authRoute.post('/login', async c => {
   const localUser = await findLocalUserByEmail(parsed.data.email)
 
   if (localUser?.passwordCredential) {
+    if (!localUser.emailVerifiedAt) {
+      fail('EMAIL_NOT_VERIFIED', 'Please verify your email before logging in', 403)
+    }
+
     const validPassword = await verifyPassword(
       parsed.data.password,
       localUser.passwordCredential.passwordHash
@@ -545,17 +556,98 @@ authRoute.post('/register', async c => {
     fail('EMAIL_ALREADY_REGISTERED', 'Email has already been registered', 409)
   }
 
-  const sessionUser = {
-    id: result.user.id,
+  const token = await issueEmailVerificationToken(result.user.id)
+  const verificationUrl = buildEmailVerificationUrl(c.req.url, token.rawToken)
+  const mailResult = await sendVerificationEmail({
     email: result.user.email,
     name: result.user.name || parsed.data.name,
-    avatar: result.user.avatar || null
+    verificationUrl
+  })
+
+  if (!mailResult.sent && process.env.VERCEL_ENV === 'production') {
+    fail('EMAIL_SEND_FAILED', 'Failed to send verification email', 500)
   }
 
-  const token = await createSessionToken(sessionUser)
+  return c.json(
+    ok({
+      verificationRequired: true,
+      email: result.user.email,
+      verificationEmailSent: mailResult.sent,
+      verificationUrlPreview: mailResult.sent ? null : verificationUrl
+    })
+  )
+})
+
+authRoute.post('/resend-verification', async c => {
+  const body = await c.req.json().catch(() => null)
+  const parsed = resendVerificationSchema.safeParse(body)
+
+  if (!parsed.success) {
+    fail('INVALID_REQUEST', 'Valid email is required', 422)
+  }
+
+  const user = await findLocalUserByEmail(parsed.data.email)
+
+  if (!user?.passwordCredential) {
+    fail('USER_NOT_FOUND', 'Account not found', 404)
+  }
+
+  if (user.emailVerifiedAt) {
+    return c.json(
+      ok({
+        verificationRequired: false,
+        email: user.email
+      })
+    )
+  }
+
+  const token = await issueEmailVerificationToken(user.id)
+  const verificationUrl = buildEmailVerificationUrl(c.req.url, token.rawToken)
+  const mailResult = await sendVerificationEmail({
+    email: user.email,
+    name: user.name || user.email,
+    verificationUrl
+  })
+
+  if (!mailResult.sent && process.env.VERCEL_ENV === 'production') {
+    fail('EMAIL_SEND_FAILED', 'Failed to send verification email', 500)
+  }
+
+  return c.json(
+    ok({
+      verificationRequired: true,
+      email: user.email,
+      verificationEmailSent: mailResult.sent,
+      verificationUrlPreview: mailResult.sent ? null : verificationUrl
+    })
+  )
+})
+
+authRoute.get('/verify-email', async c => {
+  const token = c.req.query('token') || ''
+  const fallbackReturnTo = process.env.EMAIL_VERIFY_RETURN_URL || process.env.APP_URL || '/'
+
+  if (!token) {
+    return c.redirect(appendAuthError(fallbackReturnTo, 'verification_token_missing'))
+  }
+
+  const user = await consumeEmailVerificationToken(token).catch(() => null)
+
+  if (!user) {
+    return c.redirect(appendAuthError(fallbackReturnTo, 'verification_token_invalid'))
+  }
+
+  const sessionUser = {
+    id: user.id,
+    email: user.email,
+    name: user.name || user.email,
+    avatar: user.avatar || null
+  }
+
+  const sessionToken = await createSessionToken(sessionUser)
   const isSecure = new URL(c.req.url).protocol === 'https:'
 
-  setCookie(c, getSessionCookieName(), token, {
+  setCookie(c, getSessionCookieName(), sessionToken, {
     httpOnly: true,
     secure: isSecure,
     sameSite: isSecure ? 'None' : 'Lax',
@@ -563,13 +655,7 @@ authRoute.post('/register', async c => {
     maxAge: getSessionMaxAge()
   })
 
-  return c.json(
-    ok({
-      user: sessionUser,
-      token,
-      expiresIn: getSessionMaxAge()
-    })
-  )
+  return c.redirect(appendAuthSuccess(fallbackReturnTo, 'email'))
 })
 
 authRoute.post('/logout', c => {
@@ -623,6 +709,56 @@ function normalizeAllowedReturnTo(returnTo: string) {
   })
 
   return isAllowed ? resolved.toString() : process.env.APP_URL || resolved.origin
+}
+
+function buildEmailVerificationUrl(requestUrl: string, token: string) {
+  const backendOrigin = new URL(requestUrl).origin
+  return `${backendOrigin}/api/auth/verify-email?token=${encodeURIComponent(token)}`
+}
+
+async function sendVerificationEmail(input: {
+  email: string
+  name: string
+  verificationUrl: string
+}) {
+  if (!canSendEmail()) {
+    return {
+      sent: false as const
+    }
+  }
+
+  const subject = 'Verify your Chartly email'
+  const html = `
+    <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #111827;">
+      <p>Hi ${escapeHtml(input.name)},</p>
+      <p>Complete your Chartly registration by verifying your email.</p>
+      <p>
+        <a href="${input.verificationUrl}" style="display:inline-block;padding:10px 16px;background:#111827;color:#ffffff;text-decoration:none;border-radius:8px;">
+          Verify Email
+        </a>
+      </p>
+      <p>If the button does not work, open this link:</p>
+      <p>${escapeHtml(input.verificationUrl)}</p>
+    </div>
+  `.trim()
+
+  const text = `Hi ${input.name},\n\nVerify your Chartly email:\n${input.verificationUrl}`
+
+  return sendEmail({
+    to: input.email,
+    subject,
+    html,
+    text
+  })
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;')
 }
 
 async function hashPassword(password: string) {
