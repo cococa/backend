@@ -101,7 +101,7 @@ authRoute.get('/google/callback', async c => {
   const redirectUri =
     google.redirectUri || `${new URL(c.req.url).origin}/api/auth/google/callback`
 
-  const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+  const tokenResponse: globalThis.Response | null = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded'
@@ -127,7 +127,7 @@ authRoute.get('/google/callback', async c => {
     return c.redirect(appendAuthError(returnTo, 'google_id_token_missing'))
   }
 
-  const tokenInfoResponse = await fetch(
+  const tokenInfoResponse: globalThis.Response | null = await fetch(
     `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(tokenJson.id_token)}`
   ).catch(() => null)
 
