@@ -10,6 +10,7 @@ import {
   createSessionToken,
   getAllowedReturnToOrigins,
   getDemoCredentials,
+  getGithubCredentials,
   getGoogleCredentials,
   getOptionalUser,
   getSessionCookieName,
@@ -49,6 +50,26 @@ const googleTokenInfoSchema = z.object({
   picture: z.string().optional()
 })
 
+const githubTokenSchema = z.object({
+  access_token: z.string().min(1),
+  token_type: z.string().optional(),
+  scope: z.string().optional()
+})
+
+const githubUserSchema = z.object({
+  id: z.number(),
+  login: z.string().min(1),
+  name: z.string().nullable().optional(),
+  email: z.string().email().nullable().optional(),
+  avatar_url: z.string().url().nullable().optional()
+})
+
+const githubEmailSchema = z.object({
+  email: z.string().email(),
+  primary: z.boolean().optional(),
+  verified: z.boolean().optional()
+})
+
 export const authRoute = new Hono()
 const scrypt = promisify(scryptCallback)
 
@@ -79,6 +100,31 @@ authRoute.get('/google/start', async c => {
   })
 
   return c.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`)
+})
+
+authRoute.get('/github/start', async c => {
+  const github = getGithubCredentials()
+
+  if (!github.clientId || !github.clientSecret) {
+    fail('GITHUB_AUTH_NOT_CONFIGURED', 'GitHub auth is not configured', 500)
+  }
+
+  const requestedReturnTo = c.req.query('returnTo') || process.env.APP_URL || '/'
+  const safeReturnTo = normalizeAllowedReturnTo(requestedReturnTo)
+  const state = await createOAuthStateToken({
+    returnTo: safeReturnTo
+  })
+  const redirectUri =
+    github.redirectUri || `${new URL(c.req.url).origin}/api/auth/github/callback`
+
+  const params = new URLSearchParams({
+    client_id: github.clientId,
+    redirect_uri: redirectUri,
+    scope: 'read:user user:email',
+    state
+  })
+
+  return c.redirect(`https://github.com/login/oauth/authorize?${params.toString()}`)
 })
 
 authRoute.get('/google/callback', async c => {
@@ -184,6 +230,138 @@ authRoute.get('/google/callback', async c => {
   })
 
   return c.redirect(appendAuthSuccess(returnTo, 'google'))
+})
+
+authRoute.get('/github/callback', async c => {
+  const github = getGithubCredentials()
+  const error = c.req.query('error')
+  const code = c.req.query('code')
+  const stateToken = c.req.query('state')
+  const fallbackReturnTo = process.env.APP_URL || '/'
+
+  const state = stateToken ? await parseOAuthStateToken(stateToken) : null
+  const returnTo = state?.returnTo || fallbackReturnTo
+
+  if (!github.clientId || !github.clientSecret) {
+    return c.redirect(appendAuthError(returnTo, 'github_not_configured'))
+  }
+
+  if (error || !code) {
+    return c.redirect(appendAuthError(returnTo, error || 'github_auth_failed'))
+  }
+
+  const redirectUri =
+    github.redirectUri || `${new URL(c.req.url).origin}/api/auth/github/callback`
+
+  const tokenResponse = await fetch('https://github.com/login/oauth/access_token', {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/x-www-form-urlencoded'
+    },
+    body: new URLSearchParams({
+      client_id: github.clientId,
+      client_secret: github.clientSecret,
+      code,
+      redirect_uri: redirectUri
+    }).toString()
+  }).catch(() => null)
+
+  if (!tokenResponse?.ok) {
+    return c.redirect(appendAuthError(returnTo, 'github_token_exchange_failed'))
+  }
+
+  const tokenJson = githubTokenSchema.safeParse(await tokenResponse.json().catch(() => null))
+
+  if (!tokenJson.success) {
+    return c.redirect(appendAuthError(returnTo, 'github_token_invalid'))
+  }
+
+  const githubAccessToken = tokenJson.data.access_token
+
+  const userResponse = await fetch('https://api.github.com/user', {
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Bearer ${githubAccessToken}`,
+      'User-Agent': 'chartly-auth'
+    }
+  }).catch(() => null)
+
+  if (!userResponse?.ok) {
+    return c.redirect(appendAuthError(returnTo, 'github_user_fetch_failed'))
+  }
+
+  const githubUserResult = githubUserSchema.safeParse(await userResponse.json().catch(() => null))
+
+  if (!githubUserResult.success) {
+    return c.redirect(appendAuthError(returnTo, 'github_user_invalid'))
+  }
+
+  let email = githubUserResult.data.email || ''
+
+  if (!email) {
+    const emailResponse = await fetch('https://api.github.com/user/emails', {
+      headers: {
+        Accept: 'application/json',
+        Authorization: `Bearer ${githubAccessToken}`,
+        'User-Agent': 'chartly-auth'
+      }
+    }).catch(() => null)
+
+    if (!emailResponse?.ok) {
+      return c.redirect(appendAuthError(returnTo, 'github_email_fetch_failed'))
+    }
+
+    const emailResult = z.array(githubEmailSchema).safeParse(await emailResponse.json().catch(() => null))
+
+    if (!emailResult.success) {
+      return c.redirect(appendAuthError(returnTo, 'github_email_invalid'))
+    }
+
+    const primaryEmail =
+      emailResult.data.find(item => item.primary && item.verified)?.email ||
+      emailResult.data.find(item => item.verified)?.email ||
+      emailResult.data[0]?.email ||
+      ''
+
+    email = primaryEmail
+  }
+
+  if (!email) {
+    return c.redirect(appendAuthError(returnTo, 'github_email_missing'))
+  }
+
+  const user = await ensureOAuthUser({
+    provider: 'github',
+    providerUserId: String(githubUserResult.data.id),
+    email,
+    name: githubUserResult.data.name || githubUserResult.data.login,
+    avatar: githubUserResult.data.avatar_url || null
+  }).catch(() => null)
+
+  if (!user) {
+    return c.redirect(appendAuthError(returnTo, 'github_user_upsert_failed'))
+  }
+
+  const sessionUser = {
+    id: user.id,
+    email: user.email,
+    name: user.name || githubUserResult.data.login,
+    avatar: user.avatar || githubUserResult.data.avatar_url || null
+  }
+
+  const token = await createSessionToken(sessionUser)
+  const isSecure = new URL(c.req.url).protocol === 'https:'
+
+  setCookie(c, getSessionCookieName(), token, {
+    httpOnly: true,
+    secure: isSecure,
+    sameSite: isSecure ? 'None' : 'Lax',
+    path: '/',
+    maxAge: getSessionMaxAge()
+  })
+
+  return c.redirect(appendAuthSuccess(returnTo, 'github'))
 })
 
 authRoute.get('/session', async c => {

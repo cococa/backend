@@ -56,6 +56,14 @@ export function getGoogleCredentials() {
   }
 }
 
+export function getGithubCredentials() {
+  return {
+    clientId: process.env.GITHUB_CLIENT_ID || '',
+    clientSecret: process.env.GITHUB_CLIENT_SECRET || '',
+    redirectUri: process.env.GITHUB_REDIRECT_URI || ''
+  }
+}
+
 export function getAllowedReturnToOrigins() {
   const configured = (process.env.AUTH_ALLOWED_RETURN_TO_ORIGINS || '')
     .split(',')

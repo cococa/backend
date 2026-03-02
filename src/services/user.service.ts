@@ -17,7 +17,7 @@ export async function ensureDemoUser(input: EnsureDemoUserInput) {
 }
 
 type EnsureOAuthUserInput = {
-  provider: 'google'
+  provider: 'google' | 'github'
   providerUserId: string
   email: string
   name: string
