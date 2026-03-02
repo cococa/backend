@@ -534,10 +534,17 @@ authRoute.post('/login', async c => {
 })
 
 authRoute.post('/register', async c => {
+  console.log('[auth/register] request:start')
   const body = await c.req.json().catch(() => null)
   const parsed = registerSchema.safeParse(body)
 
   if (!parsed.success) {
+    console.warn('[auth/register] request:invalid-body', {
+      issues: parsed.error.issues.map(issue => ({
+        path: issue.path.join('.'),
+        code: issue.code
+      }))
+    })
     fail(
       'INVALID_REQUEST',
       parsed.error.issues[0]?.message || 'Invalid registration payload',
@@ -545,7 +552,15 @@ authRoute.post('/register', async c => {
     )
   }
 
+  console.log('[auth/register] request:body-parsed', {
+    email: parsed.data.email,
+    name: parsed.data.name
+  })
+
   const passwordHash = await hashPassword(parsed.data.password)
+  console.log('[auth/register] password:hashed', {
+    email: parsed.data.email
+  })
   const result = await registerLocalUser({
     email: parsed.data.email,
     name: parsed.data.name,
@@ -553,10 +568,23 @@ authRoute.post('/register', async c => {
   })
 
   if (!result.created) {
+    console.warn('[auth/register] user:already-exists', {
+      email: parsed.data.email
+    })
     fail('EMAIL_ALREADY_REGISTERED', 'Email has already been registered', 409)
   }
 
+  console.log('[auth/register] user:created', {
+    userId: result.user.id,
+    email: result.user.email
+  })
+
   const token = await issueEmailVerificationToken(result.user.id)
+  console.log('[auth/register] verification-token:issued', {
+    userId: result.user.id,
+    email: result.user.email,
+    expiresAt: token.expiresAt.toISOString()
+  })
   const verificationUrl = buildEmailVerificationUrl(c.req.url, token.rawToken)
   const mailResult = await sendVerificationEmail({
     email: result.user.email,
@@ -564,10 +592,26 @@ authRoute.post('/register', async c => {
     verificationUrl
   })
 
+  console.log('[auth/register] verification-email:result', {
+    userId: result.user.id,
+    email: result.user.email,
+    sent: mailResult.sent,
+    usingPreview: !mailResult.sent
+  })
+
   if (!mailResult.sent && process.env.VERCEL_ENV === 'production') {
+    console.error('[auth/register] verification-email:failed-production', {
+      userId: result.user.id,
+      email: result.user.email
+    })
     fail('EMAIL_SEND_FAILED', 'Failed to send verification email', 500)
   }
 
+  console.log('[auth/register] response:success', {
+    userId: result.user.id,
+    email: result.user.email,
+    verificationEmailSent: mailResult.sent
+  })
   return c.json(
     ok({
       verificationRequired: true,
@@ -579,20 +623,33 @@ authRoute.post('/register', async c => {
 })
 
 authRoute.post('/resend-verification', async c => {
+  console.log('[auth/resend-verification] request:start')
   const body = await c.req.json().catch(() => null)
   const parsed = resendVerificationSchema.safeParse(body)
 
   if (!parsed.success) {
+    console.warn('[auth/resend-verification] request:invalid-body')
     fail('INVALID_REQUEST', 'Valid email is required', 422)
   }
+
+  console.log('[auth/resend-verification] request:body-parsed', {
+    email: parsed.data.email
+  })
 
   const user = await findLocalUserByEmail(parsed.data.email)
 
   if (!user?.passwordCredential) {
+    console.warn('[auth/resend-verification] user:not-found', {
+      email: parsed.data.email
+    })
     fail('USER_NOT_FOUND', 'Account not found', 404)
   }
 
   if (user.emailVerifiedAt) {
+    console.log('[auth/resend-verification] user:already-verified', {
+      userId: user.id,
+      email: user.email
+    })
     return c.json(
       ok({
         verificationRequired: false,
@@ -602,6 +659,11 @@ authRoute.post('/resend-verification', async c => {
   }
 
   const token = await issueEmailVerificationToken(user.id)
+  console.log('[auth/resend-verification] verification-token:issued', {
+    userId: user.id,
+    email: user.email,
+    expiresAt: token.expiresAt.toISOString()
+  })
   const verificationUrl = buildEmailVerificationUrl(c.req.url, token.rawToken)
   const mailResult = await sendVerificationEmail({
     email: user.email,
@@ -609,10 +671,26 @@ authRoute.post('/resend-verification', async c => {
     verificationUrl
   })
 
+  console.log('[auth/resend-verification] verification-email:result', {
+    userId: user.id,
+    email: user.email,
+    sent: mailResult.sent,
+    usingPreview: !mailResult.sent
+  })
+
   if (!mailResult.sent && process.env.VERCEL_ENV === 'production') {
+    console.error('[auth/resend-verification] verification-email:failed-production', {
+      userId: user.id,
+      email: user.email
+    })
     fail('EMAIL_SEND_FAILED', 'Failed to send verification email', 500)
   }
 
+  console.log('[auth/resend-verification] response:success', {
+    userId: user.id,
+    email: user.email,
+    verificationEmailSent: mailResult.sent
+  })
   return c.json(
     ok({
       verificationRequired: true,
@@ -627,15 +705,26 @@ authRoute.get('/verify-email', async c => {
   const token = c.req.query('token') || ''
   const fallbackReturnTo = process.env.EMAIL_VERIFY_RETURN_URL || process.env.APP_URL || '/'
 
+  console.log('[auth/verify-email] request:start', {
+    hasToken: Boolean(token)
+  })
+
   if (!token) {
+    console.warn('[auth/verify-email] token:missing')
     return c.redirect(appendAuthError(fallbackReturnTo, 'verification_token_missing'))
   }
 
   const user = await consumeEmailVerificationToken(token).catch(() => null)
 
   if (!user) {
+    console.warn('[auth/verify-email] token:invalid-or-expired')
     return c.redirect(appendAuthError(fallbackReturnTo, 'verification_token_invalid'))
   }
+
+  console.log('[auth/verify-email] token:consumed', {
+    userId: user.id,
+    email: user.email
+  })
 
   const sessionUser = {
     id: user.id,
@@ -653,6 +742,10 @@ authRoute.get('/verify-email', async c => {
     sameSite: isSecure ? 'None' : 'Lax',
     path: '/',
     maxAge: getSessionMaxAge()
+  })
+
+  console.log('[auth/verify-email] session:set-success', {
+    userId: user.id
   })
 
   return c.redirect(appendAuthSuccess(fallbackReturnTo, 'email'))
