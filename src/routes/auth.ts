@@ -101,7 +101,7 @@ authRoute.get('/google/callback', async c => {
   const redirectUri =
     google.redirectUri || `${new URL(c.req.url).origin}/api/auth/google/callback`
 
-  const tokenResponse: globalThis.Response | null = await fetch('https://oauth2.googleapis.com/token', {
+  const tokenResponse = (await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded'
@@ -113,7 +113,12 @@ authRoute.get('/google/callback', async c => {
       grant_type: 'authorization_code',
       redirect_uri: redirectUri
     }).toString()
-  }).catch(() => null)
+  }).catch(() => null)) as
+    | {
+        ok: boolean
+        json: () => Promise<unknown>
+      }
+    | null
 
   if (!tokenResponse?.ok) {
     return c.redirect(appendAuthError(returnTo, 'google_token_exchange_failed'))
@@ -127,9 +132,14 @@ authRoute.get('/google/callback', async c => {
     return c.redirect(appendAuthError(returnTo, 'google_id_token_missing'))
   }
 
-  const tokenInfoResponse: globalThis.Response | null = await fetch(
+  const tokenInfoResponse = (await fetch(
     `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(tokenJson.id_token)}`
-  ).catch(() => null)
+  ).catch(() => null)) as
+    | {
+        ok: boolean
+        json: () => Promise<unknown>
+      }
+    | null
 
   if (!tokenInfoResponse?.ok) {
     return c.redirect(appendAuthError(returnTo, 'google_token_verify_failed'))
