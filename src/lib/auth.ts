@@ -11,6 +11,7 @@ const sessionPayloadSchema = z.object({
   sub: z.string().min(1),
   email: z.string().email(),
   name: z.string().min(1),
+  avatar: z.string().optional().nullable(),
   exp: z.number().optional()
 })
 
@@ -20,6 +21,7 @@ export type SessionUser = {
   id: string
   email: string
   name: string
+  avatar?: string | null
 }
 
 type OAuthStatePayload = {
@@ -79,6 +81,7 @@ export async function createSessionToken(user: SessionUser) {
       sub: user.id,
       email: user.email,
       name: user.name,
+      avatar: user.avatar ?? null,
       iat: now,
       exp: now + SESSION_EXPIRES_IN_SECONDS
     },
@@ -152,7 +155,8 @@ export async function getOptionalUser(c: Context): Promise<SessionUser | null> {
     return {
       id: parsed.data.sub,
       email: parsed.data.email,
-      name: parsed.data.name
+      name: parsed.data.name,
+      avatar: parsed.data.avatar ?? null
     }
   } catch {
     return null

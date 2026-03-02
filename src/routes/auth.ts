@@ -168,7 +168,8 @@ authRoute.get('/google/callback', async c => {
   const sessionUser = {
     id: user.id,
     email: user.email,
-    name: user.name || tokenInfo.data.email
+    name: user.name || tokenInfo.data.email,
+    avatar: user.avatar || tokenInfo.data.picture || null
   }
 
   const token = await createSessionToken(sessionUser)
@@ -241,7 +242,8 @@ authRoute.post('/login', async c => {
     const sessionUser = {
       id: localUser.id,
       email: localUser.email,
-      name: localUser.name || localUser.email
+      name: localUser.name || localUser.email,
+      avatar: localUser.avatar || null
     }
 
     const token = await createSessionToken(sessionUser)
@@ -290,7 +292,8 @@ authRoute.post('/login', async c => {
   const sessionUser = {
     id: user.id,
     email: user.email,
-    name: user.name || credentials.name
+    name: user.name || credentials.name,
+    avatar: user.avatar || null
   }
 
   console.log('[auth/login] token:create-start', {
@@ -352,7 +355,8 @@ authRoute.post('/register', async c => {
   const sessionUser = {
     id: result.user.id,
     email: result.user.email,
-    name: result.user.name || parsed.data.name
+    name: result.user.name || parsed.data.name,
+    avatar: result.user.avatar || null
   }
 
   const token = await createSessionToken(sessionUser)
