@@ -5,6 +5,8 @@ import { authRoute } from './routes/auth.js'
 import { meRoute } from './routes/me.js'
 import { projectsRoute } from './routes/projects.js'
 import { publishedRoute } from './routes/published.js'
+import { compositeViewsRoute } from './routes/composite-views.js'
+import { publishedCompositeRoute } from './routes/published-composite.js'
 import { notionRoute } from './routes/notion.js'
 import { dataSourcesRoute } from './routes/data-sources.js'
 import { billingRoute } from './routes/billing.js'
@@ -89,8 +91,10 @@ app.get('/debug/env', c => {
 app.route('/api/auth', authRoute)
 app.route('/api/me', meRoute)
 app.route('/api/projects', projectsRoute)
+app.route('/api/composite-views', compositeViewsRoute)
 app.route('/api/data-sources', dataSourcesRoute)
 app.route('/api/published', publishedRoute)
+app.route('/api/published-composite', publishedCompositeRoute)
 app.route('/api/notion', notionRoute)
 app.route('/api/billing', billingRoute)
 app.route('/api/share', shareRoute)
